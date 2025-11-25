@@ -1,4 +1,63 @@
 #!/bin/bash
+#!/usr/bin/env bash
+set -euo pipefail
+
+# --- Jellyfin GPU setup: self-update support ---------------------------------
+
+REPO_OWNER_DEFAULT="FakeAquafina"
+REPO_NAME_DEFAULT="jellygpusetup"
+BRANCH_DEFAULT="${JELLYGPUSETUP_BRANCH:-main}"
+
+SELF_REPO_OWNER="${JELLYGPUSETUP_REPO_OWNER:-$REPO_OWNER_DEFAULT}"
+SELF_REPO_NAME="${JELLYGPUSETUP_REPO_NAME:-$REPO_NAME_DEFAULT}"
+SELF_BRANCH="${BRANCH_DEFAULT}"
+
+SELF_RAW_BASE="https://raw.githubusercontent.com/${SELF_REPO_OWNER}/${SELF_REPO_NAME}/${SELF_BRANCH}"
+SELF_SCRIPT_NAME="$(basename "$0")"
+SELF_SCRIPT_URL="${JELLYGPUSETUP_SELF_URL:-${SELF_RAW_BASE}/${SELF_SCRIPT_NAME}}"
+
+log() {
+  printf '[%s] %s\n' "$(date +'%Y-%m-%d %H:%M:%S')" "$*" >&2
+}
+
+self_update() {
+  log "Self-updating ${SELF_SCRIPT_NAME} from:"
+  log "  ${SELF_SCRIPT_URL}"
+
+  command -v curl >/dev/null 2>&1 || {
+    log "curl is required for self-update but not installed."
+    return 1
+  }
+
+  # Download to a temp file first
+  tmp_file="$(mktemp "${SELF_SCRIPT_NAME}.XXXXXX")"
+  if ! curl -fsSL "${SELF_SCRIPT_URL}" -o "${tmp_file}"; then
+    log "Failed to download updated script."
+    rm -f "${tmp_file}"
+    return 1
+  fi
+
+  chmod +x "${tmp_file}"
+  mv "${tmp_file}" "$0"
+  log "Updated ${SELF_SCRIPT_NAME} successfully."
+
+  # Optionally re-run the script after update:
+  if [[ "${JELLYGPUSETUP_RERUN_AFTER_UPDATE:-1}" = "1" ]]; then
+    log "Re-running ${SELF_SCRIPT_NAME} with original arguments…"
+    exec "$0" "$@"
+  fi
+}
+
+# --- Argument handling for self-update ---------------------------------------
+
+if [[ "${1:-}" == "--self-update" ]]; then
+  shift
+  self_update "$@"
+  exit $?
+fi
+
+# --- Rest of your existing setup_jellyfin.sh script goes below this line -----
+
 # Jellyfin setup script for Proxmox VM (Ubuntu/Debian) with NVIDIA GPU support
 # This script configures a new Jellyfin installation using Docker,
 # mounts your NAS share, and passes through the RTX 4060 GPU.
